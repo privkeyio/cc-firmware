@@ -60,7 +60,25 @@ SIGHASH_MAP = {
     "ALL|ANYONECANPAY": 1 | 0x80,
     "NONE|ANYONECANPAY": 2 | 0x80,
     "SINGLE|ANYONECANPAY": 3 | 0x80,
+    # Unified opt-in. Spelled exactly as bitcoind's SighashFromStr spells it,
+    # so these names can be handed straight to walletprocesspsbt for the
+    # co-signing side of the multisig tests.
+    "ALL|UNIFIED": 1 | 0x20,
+    "NONE|UNIFIED": 2 | 0x20,
+    "SINGLE|UNIFIED": 3 | 0x20,
+    "ALL|ANYONECANPAY|UNIFIED": 1 | 0x80 | 0x20,
+    "NONE|ANYONECANPAY|UNIFIED": 2 | 0x80 | 0x20,
+    "SINGLE|ANYONECANPAY|UNIFIED": 3 | 0x80 | 0x20,
 }
+
+# The output type a hash type names, with the opt-in bit stripped. The opt-in
+# selects a signature hash algorithm; it does not change what the signature
+# covers, so policy and modifiable-flag checks compare on this.
+def sh_base(name):
+    # tests also pass raw ints for hash types that have no name
+    if not isinstance(name, str):
+        return name
+    return name.replace("|UNIFIED", "")
 
 # (2**31) - 1 --> max unhardened, but we handle hardened via h elsewhere
 MAX_BIP32_IDX = 2147483647

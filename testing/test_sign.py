@@ -16,7 +16,7 @@ from helpers import B2A, fake_dest_addr, parse_change_back, addr_from_display_fo
 from helpers import xfp2str, seconds2human_readable, hash160
 from msg import verify_message
 from bip32 import BIP32Node
-from constants import ADDR_STYLES, ADDR_STYLES_SINGLE, SIGHASH_MAP, simulator_fixed_xfp
+from constants import ADDR_STYLES, ADDR_STYLES_SINGLE, SIGHASH_MAP, sh_base, simulator_fixed_xfp
 from txn import *
 from ctransaction import CTransaction, CTxOut, CTxIn, COutPoint
 from ckcc_protocol.constants import STXN_VISUALIZE, STXN_SIGNED
@@ -1950,6 +1950,64 @@ def test_bitcoind_missing_foreign_utxo(bitcoind, bitcoind_d_sim_watch, microsd_p
     tx_id = alice.sendrawtransaction(tx)
     assert isinstance(tx_id, str) and len(tx_id) == 64
 
+
+@pytest.mark.bitcoind
+def test_unified_needs_every_utxo(bitcoind, bitcoind_d_sim_watch, try_sign):
+    # Same shape as test_bitcoind_missing_foreign_utxo, but our input asks for
+    # the unified opt-in. That message commits to every spent amount and
+    # scriptPubKey, not just ours, so a sibling with no UTXO has to be refused
+    # rather than signed over a value we cannot see.
+    dest_address = bitcoind.supply_wallet.getnewaddress()
+    alice = bitcoind.create_wallet(wallet_name="alice_unified")
+    cc = bitcoind_d_sim_watch
+    alice_addr = alice.getnewaddress()
+    alice_pubkey = alice.getaddressinfo(alice_addr)["pubkey"]
+    cc_addr = cc.getnewaddress()
+    cc_pubkey = cc.getaddressinfo(cc_addr)["pubkey"]
+
+    for addr in (alice_addr, cc_addr):
+        bitcoind.supply_wallet.sendtoaddress(addr, 2.0)
+    bitcoind.supply_wallet.generatetoaddress(1, bitcoind.supply_wallet.getnewaddress())
+
+    psbt_list = []
+    for w in (alice, cc):
+        assert w.listunspent()
+        res = w.walletcreatefundedpsbt([], [{dest_address: 1.0}], 0, {"fee_rate": 20})
+        psbt_list.append(res["psbt"])
+
+    the_psbt = bitcoind.supply_wallet.joinpsbts(psbt_list)
+    po = BasicPSBT().parse(the_psbt.encode())
+
+    ours = None
+    for idx, inp in enumerate(po.inputs):
+        mine = any(pk.hex() == cc_pubkey for pk in inp.bip32_paths)
+        if mine:
+            ours = idx
+            continue
+        assert any(pk.hex() == alice_pubkey for pk in inp.bip32_paths)
+        inp.utxo = None
+        inp.witness_utxo = None
+
+    assert ours is not None, "our input went missing"
+    po.inputs[ours].sighash = SIGHASH_MAP["ALL|UNIFIED"]
+
+    with pytest.raises(Exception) as e:
+        try_sign(po.as_bytes(), accept=True)
+    assert "Unified sighash covers all inputs" in e.value.args[0]
+
+
+@pytest.mark.bitcoind
+@pytest.mark.parametrize("sh", [0x20, 0xa0])
+def test_sighash_unified_no_output_type(sh, _test_single_sig_sighash):
+    # The opt-in on its own names no output type. There are exactly six valid
+    # opted-in bytes and these two are not among them; consensus refuses them,
+    # so we do too rather than produce a signature no verifier reconstructs.
+    with pytest.raises(Exception) as exc:
+        _test_single_sig_sighash("legacy", [sh], num_inputs=2, num_outputs=2,
+                                 consolidation=True, sh_checks=False)
+    assert ("Unsupported sighash flag 0x%x" % sh) in exc.value.args[0]
+
+
 @pytest.mark.bitcoind
 @pytest.mark.parametrize("op_return_data", [
     81 * b"a",
@@ -2146,7 +2204,7 @@ def _test_single_sig_sighash(cap_story, press_select, start_sign, end_sign, dev,
 
             settings_set("sighshchk", int(not sh_checks))
 
-        not_all_ALL = any(sh != "ALL" for sh in sighash)
+        not_all_ALL = any(sh_base(sh) != "ALL" for sh in sighash)
 
         bitcoind_d_dev_watch.keypoolrefill(num_inputs + num_outputs)
         input_val = bitcoind.supply_wallet.getbalance() / num_inputs
@@ -2225,11 +2283,16 @@ def _test_single_sig_sighash(cap_story, press_select, start_sign, end_sign, dev,
             assert "---WARNING---" in story
             assert "Danger" in story
             assert "Destination address can be changed after signing (sighash NONE)." in story
-        elif any(sh != "ALL" for sh in sighash):
+        elif any(sh_base(sh) != "ALL" for sh in sighash):
             assert "(1 warning below)" in story
             assert "---WARNING---" in story
             assert "Caution" in story
             assert "Some inputs have unusual SIGHASH values not used in typical cases." in story
+
+        if any("UNIFIED" in sh for sh in sighash if isinstance(sh, str)):
+            # the opt-in is reported, but as what happened rather than as a
+            # risk: it does not change what the signature covers
+            assert "Unified: commits to all input amounts" in story
 
         # sign and get PSBT out
         start_sign(psbt_sh_bytes)
@@ -2280,7 +2343,7 @@ def _test_single_sig_sighash(cap_story, press_select, start_sign, end_sign, dev,
             # check txn_modifiable properly set
             po = BasicPSBT().parse(psbt_out)
             mod = po.txn_modifiable
-            used_sh = [SIGHASH_MAP[sh] for sh in sighash]
+            used_sh = [SIGHASH_MAP[sh_base(sh)] for sh in sighash]
             if all(sh > 128 for sh in used_sh):
                 # all sighash flags are ANYONECANPAY
                 assert mod & 1  # allow inputs modification
@@ -2333,8 +2396,10 @@ def test_sighash_different(addr_fmt, sighash, num_outs, _test_single_sig_sighash
 @pytest.mark.parametrize("addr_fmt", ["legacy", "p2sh-segwit", "bech32"])
 @pytest.mark.parametrize("num_outs", [5, 8])
 def test_sighash_fullmix(addr_fmt, num_outs, _test_single_sig_sighash):
-    # tx with 6 inputs representing all possible sighashes
-    _test_single_sig_sighash(addr_fmt, tuple(SIGHASH_MAP.keys()), num_inputs=6, num_outputs=num_outs)
+    # tx with one input per hash type, representing all possible sighashes
+    # - sized off the map so the opted-in half is not silently left out
+    _test_single_sig_sighash(addr_fmt, tuple(SIGHASH_MAP.keys()),
+                             num_inputs=len(SIGHASH_MAP), num_outputs=num_outs)
 
 
 @pytest.mark.bitcoind

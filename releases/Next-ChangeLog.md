@@ -11,6 +11,13 @@ This lists the new changes that have not yet been published in a normal release.
   verification of dice-roll or coin-flip mixing.
 - Bugfix: Simulator crashed on Bless Firmware, due to a desynced LED pipe. Thanks to
   [@hitechhayekian](https://github.com/hitechhayekian).
+- Enhancement: Support the unified opt-in signature hash. A PSBT can now ask for hash
+  types 0x21, 0x22, 0x23, 0xa1, 0xa2 and 0xa3, and the resulting signature commits to
+  every spent amount and scriptPubKey rather than only the one being signed. Such a
+  signature does not verify under the pre-fork rules, so the transaction cannot be
+  replayed onto a chain that has not adopted the change. Signing is unaffected unless a
+  PSBT asks for it. Covers bare, P2SH and segwit v0 inputs; taproot spending is an EDGE
+  firmware feature and is not included here.
 
 # Mk Specific Changes
 

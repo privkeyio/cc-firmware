@@ -1851,11 +1851,20 @@ class TXInpExplorer(TXExplorer):
 
         if inp.sighash and (inp.sighash != SIGHASH_ALL):
             # only show sighash value to the user if it is non-standard
+            # UNIFIED is the opt-in to the unified signature hash: it selects
+            # the algorithm rather than what the signature covers, so it is
+            # named alongside the output type rather than instead of it.
             psbt_item += "sighash: %s\n\n" % {
                 1: "ALL", 2: "NONE", 3: "SINGLE",
                 1 | 0x80: "ALL|ANYONECANPAY",
                 2 | 0x80: "NONE|ANYONECANPAY",
                 3 | 0x80: "SINGLE|ANYONECANPAY",
+                1 | 0x20: "ALL|UNIFIED",
+                2 | 0x20: "NONE|UNIFIED",
+                3 | 0x20: "SINGLE|UNIFIED",
+                1 | 0x20 | 0x80: "ALL|UNIFIED|ANYONECANPAY",
+                2 | 0x20 | 0x80: "NONE|UNIFIED|ANYONECANPAY",
+                3 | 0x20 | 0x80: "SINGLE|UNIFIED|ANYONECANPAY",
             }.get(inp.sighash, "0x%02x (non-standard)" % inp.sighash)
 
         if psbt_item:

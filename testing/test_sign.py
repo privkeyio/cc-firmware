@@ -1996,6 +1996,32 @@ def test_unified_needs_every_utxo(bitcoind, bitcoind_d_sim_watch, try_sign):
     assert "Unified sighash covers all inputs" in e.value.args[0]
 
 
+@pytest.mark.parametrize('chain', ['BTC', 'XTN'])
+@pytest.mark.parametrize('sh', ['ALL|UNIFIED', 'ALL|ANYONECANPAY|UNIFIED', 'NONE|UNIFIED'])
+def test_optin_signs_on_chain(chain, sh, fake_txn, try_sign, settings_set):
+    # The unified message carries no network field, so the chain the device is
+    # set to must not change the signature. Asserted rather than assumed: every
+    # other opt-in test here runs on regtest or testnet.
+    settings_set('chain', chain)
+    settings_set('sighshchk', 1)      # NONE is policy-blocked otherwise
+
+    def hack(psbt):
+        for i in psbt.inputs:
+            i.sighash = SIGHASH_MAP[sh]
+
+    psbt = fake_txn(2, 2, segwit_in=True, psbt_hacker=hack)
+    _, signed = try_sign(psbt, accept=True)
+
+    po = BasicPSBT().parse(signed)
+    want = SIGHASH_MAP[sh]
+    n = 0
+    for inp in po.inputs:
+        for _, sig in inp.part_sigs.items():
+            assert sig[-1] == want, "chain=%s wanted 0x%02x got 0x%02x" % (chain, want, sig[-1])
+            n += 1
+    assert n, "nothing was signed"
+
+
 @pytest.mark.bitcoind
 @pytest.mark.parametrize("sh", [0x20, 0xa0])
 def test_sighash_unified_no_output_type(sh, _test_single_sig_sighash):

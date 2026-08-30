@@ -1998,30 +1998,36 @@ def test_unified_needs_every_utxo(bitcoind, bitcoind_d_sim_watch, try_sign):
 
 @pytest.mark.parametrize('chain', ['BTC', 'XTN'])
 @pytest.mark.parametrize('sh', ['ALL|UNIFIED', 'ALL|ANYONECANPAY|UNIFIED', 'NONE|UNIFIED'])
-def test_optin_signs_on_chain(chain, sh, fake_txn, try_sign, settings_set):
+def test_optin_signs_on_chain(chain, sh, fake_txn, try_sign, settings_set, settings_get):
     # Every other opt-in test here runs on regtest or testnet, so nothing
     # covered signing with the device set to mainnet. This does not compare
     # digests across chains -- fake_txn derives chain-specific addresses, so
     # the two runs are different transactions -- it just shows the opt-in is
     # honoured on both, rather than gated to test networks somewhere.
-    settings_set('chain', chain)
-    settings_set('sighshchk', 1)      # NONE is policy-blocked otherwise
+    # restore afterwards: leaving the chain set breaks every later test that
+    # assumes the default, which is how this first showed up
+    was = settings_get('chain', 'XTN')
+    try:
+        settings_set('chain', chain)
+        settings_set('sighshchk', 1)      # NONE is policy-blocked otherwise
 
-    def hack(psbt):
-        for i in psbt.inputs:
-            i.sighash = SIGHASH_MAP[sh]
+        def hack(psbt):
+            for i in psbt.inputs:
+                i.sighash = SIGHASH_MAP[sh]
 
-    psbt = fake_txn(2, 2, segwit_in=True, psbt_hacker=hack)
-    _, signed = try_sign(psbt, accept=True)
+        psbt = fake_txn(2, 2, segwit_in=True, psbt_hacker=hack)
+        _, signed = try_sign(psbt, accept=True)
 
-    po = BasicPSBT().parse(signed)
-    want = SIGHASH_MAP[sh]
-    n = 0
-    for inp in po.inputs:
-        for _, sig in inp.part_sigs.items():
-            assert sig[-1] == want, "chain=%s wanted 0x%02x got 0x%02x" % (chain, want, sig[-1])
-            n += 1
-    assert n, "nothing was signed"
+        po = BasicPSBT().parse(signed)
+        want = SIGHASH_MAP[sh]
+        n = 0
+        for inp in po.inputs:
+            for _, sig in inp.part_sigs.items():
+                assert sig[-1] == want, "chain=%s wanted 0x%02x got 0x%02x" % (chain, want, sig[-1])
+                n += 1
+        assert n, "nothing was signed"
+    finally:
+        settings_set('chain', was)
 
 
 @pytest.mark.bitcoind

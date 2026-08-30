@@ -51,7 +51,9 @@ ALL_SIGHASH_FLAGS = [
     SIGHASH_NONE|SIGHASH_ANYONECANPAY,
     SIGHASH_SINGLE|SIGHASH_ANYONECANPAY,
     # Opted-in forms. There are exactly six, and 0x20/0xa0 are not among them:
-    # they name no output type, and consensus refuses them.
+    # they name no output type. For the script types signed here that is a
+    # standardness rule rather than consensus (IsDefinedHashtypeSignature under
+    # STRICTENC), but a signature no node would relay is not worth making.
     SIGHASH_ALL|SIGHASH_UNIFIED,
     SIGHASH_NONE|SIGHASH_UNIFIED,
     SIGHASH_SINGLE|SIGHASH_UNIFIED,

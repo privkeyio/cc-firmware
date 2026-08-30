@@ -1897,18 +1897,16 @@ class psbtObject(psbtProxy):
 
         # The unified message commits to every spent amount and scriptPubKey,
         # so gather them here where the UTXOs are already being parsed rather
-        # than paying for a second pass at signing time. ANYONECANPAY carries
-        # only this input's spent output inline and needs neither.
-        # Only our own inputs matter: a co-signer opting in on an input we
-        # will never sign does not make us read its siblings.
-        unified_needed = any(
-            inp.num_our_keys and inp.sighash
-                             and (inp.sighash & SIGHASH_UNIFIED)
-                             and not (inp.sighash & SIGHASH_ANYONECANPAY)
-            for inp in self.inputs
-        )
-        hashAmounts = sha256() if unified_needed else None
-        hashScriptPubKeys = sha256() if unified_needed else None
+        # than paying for a second pass at signing time.
+        # - unconditionally, not only when an input declares the opt-in:
+        #   whether an input is ours is not settled until
+        #   determine_my_signing_key() runs inside this very loop, because a
+        #   WIF-store input carries no subpaths and only becomes ours there.
+        #   A gate evaluated up here would miss it and leave the digest
+        #   without the amounts it needs.
+        hashAmounts = sha256()
+        hashScriptPubKeys = sha256()
+        no_utxo = None
 
         for i, txi in self.input_iter():
             # check for duplicate inputs
@@ -1925,14 +1923,12 @@ class psbtObject(psbtProxy):
                 if inp.num_our_keys and not inp.fully_signed:
                     # we cannot proceed if the input is ours and there is no UTXO
                     raise FatalPSBTIssue('Missing own UTXO(s). Cannot determine value being signed')
-                elif unified_needed:
-                    # A foreign input we would otherwise tolerate. The unified
-                    # message covers it too, so without its UTXO there is no
-                    # digest to compute: refuse rather than sign something else.
-                    raise FatalPSBTIssue(
-                        'Missing UTXO on input #%d. Unified sighash covers all inputs' % i)
                 else:
-                    # input clearly not ours
+                    # input clearly not ours. Remember it: if we end up signing
+                    # with the opt-in, the message covers this input too and we
+                    # have no amount for it.
+                    if no_utxo is None:
+                        no_utxo = i
                     foreign.append(i)
                     continue
 
@@ -1942,9 +1938,8 @@ class psbtObject(psbtProxy):
             assert utxo.nValue >= 0, "negative input value: i%d" % i
             total_in += utxo.nValue
 
-            if unified_needed:
-                hashAmounts.update(pack('<q', utxo.nValue))
-                hashScriptPubKeys.update(ser_string(utxo.scriptPubKey))
+            hashAmounts.update(pack('<q', utxo.nValue))
+            hashScriptPubKeys.update(ser_string(utxo.scriptPubKey))
 
             if not inp.utxo and not inp.witness_utxo_is_provably_segwit(utxo):
                 unverified_witness_utxo.append(i)
@@ -1988,11 +1983,27 @@ class psbtObject(psbtProxy):
 
             del utxo
 
+        # determine_my_signing_key() has now run for every input, so which are
+        # ours is settled and the opt-in can be judged. ANYONECANPAY carries
+        # this input's spent output inline and needs neither hash.
+        unified_needed = any(
+            inp.num_our_keys and inp.sighash
+                             and (inp.sighash & SIGHASH_UNIFIED)
+                             and not (inp.sighash & SIGHASH_ANYONECANPAY)
+            for inp in self.inputs
+        )
         if unified_needed:
+            if no_utxo is not None:
+                # Refuse rather than sign over an amount we cannot see. Raised
+                # here, during validation, so the user is not asked to approve
+                # a transaction that could never be signed.
+                raise FatalPSBTIssue(
+                    'Missing UTXO on input #%d. Unified sighash covers all inputs' % no_utxo)
             self.hashAmounts = hashAmounts.digest()
             self.hashScriptPubKeys = hashScriptPubKeys.digest()
-            del hashAmounts, hashScriptPubKeys
-            gc.collect()
+
+        del hashAmounts, hashScriptPubKeys
+        gc.collect()
 
         # XXX scan witness data provided, and consider those ins signed if not multisig?
 

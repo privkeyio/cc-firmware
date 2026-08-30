@@ -1999,9 +1999,11 @@ def test_unified_needs_every_utxo(bitcoind, bitcoind_d_sim_watch, try_sign):
 @pytest.mark.parametrize('chain', ['BTC', 'XTN'])
 @pytest.mark.parametrize('sh', ['ALL|UNIFIED', 'ALL|ANYONECANPAY|UNIFIED', 'NONE|UNIFIED'])
 def test_optin_signs_on_chain(chain, sh, fake_txn, try_sign, settings_set):
-    # The unified message carries no network field, so the chain the device is
-    # set to must not change the signature. Asserted rather than assumed: every
-    # other opt-in test here runs on regtest or testnet.
+    # Every other opt-in test here runs on regtest or testnet, so nothing
+    # covered signing with the device set to mainnet. This does not compare
+    # digests across chains -- fake_txn derives chain-specific addresses, so
+    # the two runs are different transactions -- it just shows the opt-in is
+    # honoured on both, rather than gated to test networks somewhere.
     settings_set('chain', chain)
     settings_set('sighshchk', 1)      # NONE is policy-blocked otherwise
 
@@ -2026,8 +2028,9 @@ def test_optin_signs_on_chain(chain, sh, fake_txn, try_sign, settings_set):
 @pytest.mark.parametrize("sh", [0x20, 0xa0])
 def test_sighash_unified_no_output_type(sh, _test_single_sig_sighash):
     # The opt-in on its own names no output type. There are exactly six valid
-    # opted-in bytes and these two are not among them; consensus refuses them,
-    # so we do too rather than produce a signature no verifier reconstructs.
+    # opted-in bytes and these two are not among them; they are non-standard
+    # for the script types signed here, so we refuse rather than produce a
+    # signature no node would relay.
     with pytest.raises(Exception) as exc:
         _test_single_sig_sighash("legacy", [sh], num_inputs=2, num_outputs=2,
                                  consolidation=True, sh_checks=False)
@@ -2420,10 +2423,14 @@ def test_sighash_different(addr_fmt, sighash, num_outs, _test_single_sig_sighash
 
 @pytest.mark.bitcoind
 @pytest.mark.parametrize("addr_fmt", ["legacy", "p2sh-segwit", "bech32"])
-@pytest.mark.parametrize("num_outs", [5, 8])
+@pytest.mark.parametrize("num_outs", [5, 8, 12])
 def test_sighash_fullmix(addr_fmt, num_outs, _test_single_sig_sighash):
     # tx with one input per hash type, representing all possible sighashes
     # - sized off the map so the opted-in half is not silently left out
+    # - num_outs must reach len(SIGHASH_MAP) in at least one case: with fewer
+    #   outputs than inputs the SINGLE members make this bail out early on the
+    #   out-of-range check, and then nothing here ever signs and broadcasts a
+    #   transaction mixing every hash type, which is the point of the test
     _test_single_sig_sighash(addr_fmt, tuple(SIGHASH_MAP.keys()),
                              num_inputs=len(SIGHASH_MAP), num_outputs=num_outs)
 

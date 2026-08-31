@@ -1805,11 +1805,13 @@ class psbtObject(psbtProxy):
             )
 
         if unified_sh:
-            # Replay protection is a property of the transaction the user is
-            # approving, and signing the legacy way is indistinguishable from
-            # this unless we say which one happened.
+            # Say which signature hash was used: the legacy one is otherwise
+            # indistinguishable from this. Phrased like the other sighash
+            # notices, as what it means for this transaction rather than as a
+            # summary of the rule. The exact type is on the per-input screen.
             self.ux_notes.append(
-                ("Sighash", "Unified: commits to all input amounts, no replay before the fork.")
+                ("Sighash", "Commits to every input amount, not just this one "
+                            "(sighash UNIFIED).")
             )
 
     def consider_dangerous_change(self, my_xfp):

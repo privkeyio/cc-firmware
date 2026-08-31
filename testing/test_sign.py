@@ -2327,7 +2327,7 @@ def _test_single_sig_sighash(cap_story, press_select, start_sign, end_sign, dev,
         if any("UNIFIED" in sh for sh in sighash if isinstance(sh, str)):
             # the opt-in is reported, but as what happened rather than as a
             # risk: it does not change what the signature covers
-            assert "Unified: commits to all input amounts" in story
+            assert "(sighash UNIFIED)" in story
 
         # sign and get PSBT out
         start_sign(psbt_sh_bytes)

@@ -1,3 +1,21 @@
+# COLDCARD, with the unified opt-in signature hash
+
+An unofficial fork of [COLDCARD firmware](https://github.com/Coldcard/firmware) that signs with the unified opt-in signature hash defined by the Bitcoin hardfork, as Bitcoin Knots `v29.4.1.knots20260508` specifies it in [doc/unified-sighash.md](https://github.com/bitcoinknots/bitcoin/blob/v29.4.1.knots20260508/doc/unified-sighash.md). It is not affiliated with Coinkite. Coinkite has not adopted the fork, so use their firmware instead if that is what you want.
+
+> **Not audited. Use at your own risk, and no warranty of any kind, see the [LICENSE](LICENSE).** Builds here are signed with the published development key, so the device shows a warning and a forced delay on every boot and the green "genuine" light stays red, permanently. Everything below the divider is Coinkite's documentation and describes their firmware rather than this fork.
+
+## What differs from COLDCARD
+
+- **Signs the unified message when the PSBT asks for it.** An input declaring hash type `0x21`, `0x22`, `0x23`, `0xa1`, `0xa2` or `0xa3` is signed with the fork's message; one declaring nothing is signed the standard way, byte for byte as before.
+- **The approval screen says what the signature covers.** Opting in commits to every spent amount and scriptPubKey rather than only the input being signed. ANYONECANPAY gets its own wording, because those commit to that input's own amount and to no other.
+- **`0x20` and `0xa0` are refused.** They set the opt-in bit but name no output type.
+- **A missing UTXO is refused rather than worked around.** The message covers every input's amount, so an input without its spent output has no digest to compute.
+- **Covers bare, P2SH and segwit v0.** This tree does not sign taproot, so the rule's taproot script types are unreachable here.
+
+This carries no activation height and decides no consensus rules. It is the signature message only: the wallet that builds the PSBT decides which one to ask for.
+
+---------------
+
 # Security Advisory
 
 - Versions from 2021 to July 2026 had a bug which produced poor entropy.

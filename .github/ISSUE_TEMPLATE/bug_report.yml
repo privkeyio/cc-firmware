@@ -7,7 +7,7 @@ body:
       value: |
         Please check the [latest release](https://github.com/privkeyio/cc-firmware/releases/latest) first.
 
-        This is COLDCARD firmware with one change: it signs with the unified opt-in signature hash when the PSBT asks for it. Everything else is Coinkite's code unchanged, so if official COLDCARD firmware does the same thing, please report it [upstream](https://github.com/Coldcard/firmware/issues), where it gets fixed for everyone.
+        This is COLDCARD firmware with one change: it signs with the unified opt-in signature hash when the PSBT asks for it. Everything else is Coinkite's code unchanged, so if official COLDCARD firmware does the same thing, please email Coinkite at support@coinkite.com, where it gets fixed for everyone.
 
         Never paste your seed, PIN or passphrase anywhere, including here.
 

@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        This fork exists only for the unified opt-in signature hash. Anything that is not specific to that, such as a new menu, a seed tool or another device, is better raised [upstream](https://github.com/Coldcard/firmware/issues), where it benefits far more people and can ship in firmware Coinkite signs.
+        This fork exists only for the unified opt-in signature hash. Anything that is not specific to that, such as a new menu, a seed tool or another device, is better sent to Coinkite at support@coinkite.com, where it benefits far more people and can ship in firmware Coinkite signs.
 
   - type: textarea
     id: problem

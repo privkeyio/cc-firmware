@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in this firmware does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [latest release](https://github.com/privkeyio/cc-firmware/releases/latest) first.
+
+        This is COLDCARD firmware with one change: it signs with the unified opt-in signature hash when the PSBT asks for it. Everything else is Coinkite's code unchanged, so if official COLDCARD firmware does the same thing, please report it [upstream](https://github.com/Coldcard/firmware/issues), where it gets fixed for everyone.
+
+        Never paste your seed, PIN or passphrase anywhere, including here.
+
+  - type: dropdown
+    id: upstream
+    attributes:
+      label: Does the same thing happen on official COLDCARD firmware?
+      options:
+        - No, only on this firmware
+        - Yes, official firmware does it too
+        - Haven't checked
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version from **Advanced/Tools > Upgrade Firmware > Show Version**.
+      placeholder: 1.5.3QU
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: Device
+      options:
+        - Mk4
+        - Mk5
+        - Q
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Wallet software
+      description: The wallet that built the PSBT, with its exact version.
+      placeholder: Shrike 2.5.6-blake2b.1
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what the screen showed instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: false
